@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[12]:
-
-
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -118,7 +112,6 @@ class diff_Exp:
         with localconverter(ro.default_converter + pandas2ri.converter):
             res_pd = ro.conversion.rpy2py(res_r_df)
         res_pd.insert(0, 'gene_name', gene_names)
-        print(res_pd)
         return res_pd
     
     def plot_heatmap(self, res, top_percent=20):
@@ -333,4 +326,3 @@ if __name__ == '__main__':
     #go_analysis = GoAnalysis(filtered_data, res_pd)
     #go_analysis.run_go_analysis()
     #go_analysis.plot_go_enrichment()
-
