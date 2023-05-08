@@ -16,10 +16,11 @@ This is a python program that performs multiple types of gene expression analysi
 - goatools
 - gseapy
 ## Usage
+# This script requires you download the excel file containing the example geneset data to execute properly.
 - Instantiate an RNASeqData object with the filename of the RNA-Seq data in Excel format
 - Use the clean_data method to filter genes based on a minimum count threshold
 - Instantiate a diff_Exp object with the filtered gene data
 - Use the run_deseq method to perform differential expression analysis on the filtered data
-- Use the plot_heatmap method to plot a heatmap of the most differentially expressed genes.
-- use the PCAplot to plot the PCA for your filtered geneset
-- GO and GSEA analysis are incomplete and are therefore non functional.
+- Use the plot_heatmap method to plot a heatmap of the most differentially expressed genes
+- Use the PCAplot to plot the PCA for your filtered geneset
+- GO and GSEA analysis are incomplete and are therefore non functional
