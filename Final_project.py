@@ -231,7 +231,7 @@ class GeneSetEnrichment:
         gsea['Rank'] = -np.log10(gsea.padj) * gsea.log2FoldChange
         gsea = gsea.sort_values('Rank', ascending = False)
         ranking = gsea[['gene_name', 'Rank']]
-        pre_res = gp.prerank(rnk = ranking, gene_sets = 'KEGG_2021_Human', seed = 6)
+        pre_res = gp.prerank(rnk = ranking, gene_sets = 'GO_Biological_Process_2021', seed = 6)
        
         output = []
         for term in list(pre_res.results):
