@@ -18,7 +18,7 @@ This is a python program that performs multiple types of gene expression analysi
 - gseapy
 
 ## Usage
-1.Download the Excel file containing the example geneset data.
+1. Download the Excel file containing the example geneset data.
 2. Instantiate an RNASeqData object with the filename of the RNA-Seq data in Excel format.
 3. Use the clean_data method to filter genes based on a minimum count threshold.
 4. Instantiate a DiffExp object with the filtered gene data.
