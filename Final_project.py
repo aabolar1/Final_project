@@ -16,6 +16,7 @@ from goatools.associations import read_ncbi_gene2go
 from goatools.go_enrichment import GOEnrichmentStudy
 from goatools.base import download_go_basic_obo
 import gseapy as gp
+from gseapy.plot import gseaplot
 
 class RNASeqData:
     '''
@@ -219,41 +220,36 @@ class GeneSetEnrichment:
     '''
     A class that represents gene set enrichment analysis (GSEA).
     '''
-    def __init__(self, filtered_gene_dataset):
-        self.filtered_gene_dataset = filtered_gene_dataset
+    def __init__(self, res_pd):
+        self.res_pd = res_pd
         
-    def to_df(self):
-        return self.data
+    def gsea(self):
         
-    def run_gsea(self, gene_set, gene_sets_file, num_permutations=1000, figsize=(8, 8)):
-        # perform GSEA using gseapy
-        gs_res = gp.gsea(
-            data=self.filtered_gene_dataset.to_df(), 
-            gene_sets=self.gene_sets_file, 
-            cls=gene_set,
-            permutation_type='phenotype',
-            permutation_num=num_permutations,
-            method='signal_to_noise',
-            verbose=False
-        )
+        # Perform GSEA analysis for GO_Biological_Process_2021
+        gsea = self.res_pd
+        gsea = gsea[gsea.padj < 0.05].dropna()
+        gsea['Rank'] = -np.log10(gsea.padj) * gsea.log2FoldChange
+        gsea = gsea.sort_values('Rank', ascending = False)
+        ranking = gsea[['gene_name', 'Rank']]
+        pre_res = gp.prerank(rnk = ranking, gene_sets = 'KEGG_2021_Human', seed = 6)
+       
+        output = []
+        for term in list(pre_res.results):
+            out.append([term,
+                        pre_res.results[term]['fdr'],
+                        pre_res.results[term]['es'],
+                        pre_res.results[term]['nes']])
+        output_df = pd.DataFrame(output, columns = ['Term', 'fdr', 'es', 'nes']).sort_values('fdr').reset_index(drop = True)
         
         # plot the GSEA results using matplotlib
-        plt.figure(figsize=figsize)
-        plt.plot(gs_res.es, gs_res.re, 'o', markersize=5)
-        plt.axvline(x=0, color='k', linestyle='--', linewidth=0.5)
-        plt.axhline(y=0, color='k', linestyle='--', linewidth=0.5)
-        plt.xlabel('Enrichment score')
-        plt.ylabel('Rank')
-        plt.title(f'GSEA {gene_set} analysis')
-        plt.show()         
-    
-        return plt
+        graph = output_df.iloc[0].Term
+        gseaplot(pre_res.ranking, term = graph, **pre_res.result[graph])
     
 class GeneOntologyEnrichment:
     '''
     A class that performs Gene Ontology Enrichment Analysis.
     '''
-    def __init__(self, filtered_data, species='human', pval_threshold=0.05, log_fc_threshold=1.0):
+    def __init__(self, filtered_data, species='human', pval_threshold=0.05, log_fc_threshold=1.0, res_pd):
         self.filtered_data = filtered_data
         self.species = species
         self.pval_threshold = pval_threshold
@@ -261,6 +257,7 @@ class GeneOntologyEnrichment:
         self.geneids_pop = self.get_gene_ids(species)
         self.assoc = self.get_gene_associations(species)
         self.goea_results_all = self.run_go_analysis()
+        self.res_pd = res_pd
         
     def get_gene_ids(self, species):
         if species == 'human':
@@ -297,7 +294,7 @@ class GeneOntologyEnrichment:
 if __name__ == '__main__':
     # Load and clean RNA sequencing data
     rna_seq_data = RNASeqData('gene_fpkm.xlsm')
-    filtered_data = rna_seq_data.clean_data(1)
+    filtered_data = rna_seq_data.clean_data(1000)
     
     # Run differential expression analysis
     diff = diff_Exp(filtered_data)
@@ -319,7 +316,9 @@ if __name__ == '__main__':
     plt.show()
     
     # Perform GeneSetEnrichment
-    #enrichment = gsea.run_gsea('h.all.v2023.1.Hs.symbols.gmt.txt', '/Users/alliabolarin/Documents/Python/h.all.v2023.1.Hs.symbols.gmt.txt')
+    g_sea = GeneSetEnrichment(res_pd)
+    df = g_sea.gsea()
+    
     
      
     # Perform GO analysis
