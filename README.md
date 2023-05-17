@@ -26,5 +26,5 @@ This is a python program that performs multiple types of gene expression analysi
 6. Use the plot_heatmap method to plot a heatmap of the most differentially expressed genes.
 7. Use the PCAplot method to plot the PCA for your filtered geneset.
 8. Instantiate a GeneSetEnrichment object with the differential expression analysis dataframe
-9. Use the gsea method to perfrom gene set enrichmen analysis for GO_Biological_Process_2021
+9. Use the gsea method to perfrom gene set enrichmen analysis for GO_Biological_Process_2021 & GO_Molecular_Function_2021
 10. GO analysis unavailable at this time.
