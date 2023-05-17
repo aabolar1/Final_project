@@ -10,7 +10,6 @@ from rpy2.robjects import pandas2ri
 pandas2ri.activate()
 from rpy2.robjects.conversion import localconverter
 from sklearn.decomposition import PCA
-deseq = importr('DESeq2')
 from goatools.obo_parser import GODag
 from goatools.associations import read_ncbi_gene2go
 from goatools.go_enrichment import GOEnrichmentStudy
@@ -18,10 +17,12 @@ from goatools.base import download_go_basic_obo
 import gseapy as gp
 from gseapy.plot import gseaplot
 
+deseq = importr('DESeq2')
+
 class RNASeqData:
     '''
     This class object represents the RNA seq data. It contains the name of the
-    genes and the raw counts for each gene.
+    genes and the logfpkm counts for each gene.
     '''
 
     def __init__(self, filename):
@@ -31,11 +32,11 @@ class RNASeqData:
 
     def create_gene_data_list(self):
         '''
-        This method creates a list of dictionaries, with each dictionary containing the gene information and raw counts
+        This method creates a list of dictionaries, with each dictionary containing the gene information and logfpkm counts
         for a single gene.
         
         Returns:
-            A list of dictionaries, with each dictionary containing the gene information and raw counts for a single gene.
+            gene_data_list (list): A list of dictionaries, with each dictionary containing the gene information and logfpkm counts for a single gene.
         '''
         gene_data_list = []
         for i, row in self.data.iterrows():
@@ -50,10 +51,13 @@ class RNASeqData:
  
     def clean_data(self, threshold):
         '''
-        This method removes any genes with counts lower than the specified threshold.
+        Remove any genes removes any genes with counts lower than the specified threshold.
+        
+        Parameters:
+            threshold (int): The logfpkm count threshold for filtering genes.
         
         Returns:
-            A list of dictionaries, with each dictionary containing the gene information and raw counts
+            gene_data_list (list): A list of dictionaries, with each dictionary containing the gene information and logfpkm counts
             for a single gene.
         '''
         self.gene_data_list = [gene_data for gene_data in self.gene_data_list
@@ -61,7 +65,7 @@ class RNASeqData:
         print(f"Total number of genes post filtering: {len(self.gene_data_list)}")
         return self.gene_data_list
 
-class diff_Exp:
+class DiffExp:
     '''
     This class object performs differential expression analysis on the filtered RNA-seq data.
     '''
@@ -72,6 +76,11 @@ class diff_Exp:
         self.gene_name = self.get_gene_names()
         
     def get_gene_names(self):
+        '''
+        Returns a list of gene names
+        
+        Returns: gene_names (list): A list of gene names.
+        '''
         return [gene['gene_name'] for gene in self.gene_data_list]
     
     def create_data_frame(self):
@@ -94,19 +103,19 @@ class diff_Exp:
     def run_deseq(self, gene_names):
         '''
         Runs DESeq2 on the RNA-seq data and returns the results.
+        
+        Returns:
+            res_pd (pd.DataFrame): Results of the differential expression analysis.
         '''
         # create sample_info DataFrame with correct number of conditions
         sample_names = self.data.columns[2:]
         conditions = [name.split('_')[0] for name in sample_names]
-        sample_info = pd.DataFrame({'sample': sample_names, 
-                                'condition': conditions})
+        sample_info = pd.DataFrame({'sample': sample_names,'condition': conditions})
         
         robjects.globalenv['sample_info'] = ro.conversion.py2rpy(sample_info)
         design_formula = robjects.Formula("~ condition")
         counts = self.data.iloc[:,2:].astype(int).values
-        dds = deseq.DESeqDataSetFromMatrix(countData=counts,
-                                           colData=sample_info,
-                                           design=design_formula)
+        dds = deseq.DESeqDataSetFromMatrix(countData=counts, colData=sample_info, design=design_formula)
         dds = deseq.DESeq(dds)
         res = deseq.results(dds)
         res_r_df = robjects.r['as.data.frame'](res)
@@ -117,7 +126,14 @@ class diff_Exp:
     
     def plot_heatmap(self, res, top_percent=20):
         '''
-        Plots a heatmap of the most differentially expressed genes.
+        Plots a heatmap of the top 20%  most differentially expressed genes.
+        
+        Parameters: 
+            res (pd.DataFrame): Results of the differential expression analysis.
+            top_percent (float): Percentage of top differentially expressed genes to plot.
+        
+        Returns:
+            plt (matplotlin.pyplot): The heatmap plot.
         '''
         # Get the top x% most differentially expressed genes
         num_genes = int(len(res) * (top_percent / 100))
@@ -146,6 +162,13 @@ class diff_Exp:
     def plot_volcano(self, res, top_percent=20):
         '''
         Plots a volcano plot of the differential expression results.
+        
+        Parameters:
+            res (pd.DataFrame): Results of the differential expression analysis.
+            top_percent (float): Percentage of top differentially expressed genes to plot.
+            
+        Retruns:
+            matplotlib.pyplot: volcano plot
         '''
         # Set up plot
         plt.figure(figsize=(8, 8))
@@ -188,6 +211,10 @@ class PCAPlot:
         '''
         Fit a PCA model to the gene expression data and compute the
         transformed data in the PCA space.
+        
+        Returns:
+            transformed_data (numpy.ndarray): The tranformed data in the PCA space.
+            sample_labels (list): gene names
         '''
         data = np.array([d['counts'] for d in self.gene_dataset])
         gene_names = [d['gene_name'] for d in self.gene_dataset]
@@ -224,32 +251,58 @@ class GeneSetEnrichment:
         self.res_pd = res_pd
         
     def gsea(self):
+        '''
+        Perform gene set enrichment analysis (GSEA) using different gene sets.
+        '''
+        # Perform GSEA analysis for GO_Biological_Process_2021 & GO_Molecular_Function_2021
+        gsea_input = self.res_pd
+        gsea_results = gsea_input[gsea_input.padj < 0.05].dropna()
+        gsea_results['Rank'] = -np.log10(gsea_results.padj) * gsea_results.log2FoldChange
+        gsea_results = gsea_results.sort_values('Rank', ascending = False)
+        ranking = gsea_results[['gene_name', 'Rank']]
+    
+        # Perform GSEA analysis using the custom gene set
+        pre_res = gp.prerank(rnk = ranking, gene_sets = 'GO_Biological_Process_2021', seed = 1024)
         
-        # Perform GSEA analysis for GO_Biological_Process_2021
-        gsea = self.res_pd
-        gsea = gsea[gsea.padj < 0.05].dropna()
-        gsea['Rank'] = -np.log10(gsea.padj) * gsea.log2FoldChange
-        gsea = gsea.sort_values('Rank', ascending = False)
-        ranking = gsea[['gene_name', 'Rank']]
-        pre_res = gp.prerank(rnk = ranking, gene_sets = 'GO_Biological_Process_2021', seed = 6)
-       
         output = []
         for term in list(pre_res.results):
-            out.append([term,
+            output.append([
+                        term,
+                        pre_res.results[term]['pval'],
                         pre_res.results[term]['fdr'],
                         pre_res.results[term]['es'],
-                        pre_res.results[term]['nes']])
-        output_df = pd.DataFrame(output, columns = ['Term', 'fdr', 'es', 'nes']).sort_values('fdr').reset_index(drop = True)
+                        pre_res.results[term]['nes']
+            ])
+        output_df = pd.DataFrame(output, columns = ['Term', 'pval', 'fdr', 'es', 'nes']).sort_values('fdr').reset_index(drop=True)
         
         # plot the GSEA results using matplotlib
         graph = output_df.iloc[0].Term
-        gseaplot(pre_res.ranking, term = graph, **pre_res.result[graph])
+        gseaplot(pre_res.ranking, term = graph, **pre_res.results[graph])
+        gseaplot(pre_res.ranking, term = graph, **pre_res.results[graph], ofname = 'gene_set_enrichment_results_fig.png')
+        
+        pre_res = gp.prerank(rnk = ranking, gene_sets = 'GO_Molecular_Function_2021', seed = 1024)
     
+        output = []
+        for term in list(pre_res.results):
+            output.append([
+                        term,
+                        pre_res.results[term]['pval'],
+                        pre_res.results[term]['fdr'],
+                        pre_res.results[term]['es'],
+                        pre_res.results[term]['nes']])
+        output_df = pd.DataFrame(output, columns = ['Term', 'pval', 'fdr', 'es', 'nes']).sort_values('fdr').reset_index(drop=True)
+        
+        # plot the GSEA results using matplotlib
+        graph = output_df.iloc[0].Term
+        gseaplot(pre_res.ranking, term = graph, **pre_res.results[graph])
+        gseaplot(pre_res.ranking, term = graph, **pre_res.results[graph], ofname = 'gene_set_enrichment_results2_fig.png')
+        
+        
 class GeneOntologyEnrichment:
     '''
     A class that performs Gene Ontology Enrichment Analysis.
     '''
-    def __init__(self, filtered_data, species='human', pval_threshold=0.05, log_fc_threshold=1.0, res_pd):
+    def __init__(self, res_pd, filtered_data, species='human', pval_threshold=0.05, log_fc_threshold=1.0):
         self.filtered_data = filtered_data
         self.species = species
         self.pval_threshold = pval_threshold
@@ -260,11 +313,29 @@ class GeneOntologyEnrichment:
         self.res_pd = res_pd
         
     def get_gene_ids(self, species):
+        '''
+        Get gene IDs for the specified species
+        
+        Parameters: 
+            species (str): Species name, i.e. human or mouse
+            
+        Returns:
+            geneids: list of gene IDs
+        '''
         if species == 'human':
             geneids = read_ncbi_gene2go("gene2go", taxids=[9606])[0]
         return geneids
         
     def get_gene_associations(self, species):
+        '''
+        Get gene associations for the specified species.
+        
+        Parameters: 
+            species (str): Species name, i.e. human or mouse
+            
+        Returns
+            gene2go_dict (dictionary): dictionatry of gene associations
+        '''
         gene2go = read_ncbi_gene2go("gene2go", taxids=[9606])
         gene2go_dict = {}
         for i, j in gene2go.items():
@@ -273,6 +344,12 @@ class GeneOntologyEnrichment:
         return gene2go_dict
     
     def run_go_analysis(self):
+        '''
+        Run Gene Ontology enrichment analysis.
+        
+        Returns:
+            object: GOEnrichmentStudy object
+        '''
         obo_dag = GODag("go-basic.obo")
         goeaobj = GOEnrichmentStudy(
             self.geneids_pop,
@@ -287,6 +364,12 @@ class GeneOntologyEnrichment:
         return goeaobj.run_study(geneids_study)
     
     def plot_go_enrichment(self, num_enriched_terms=10):
+        '''
+        Plot Gene Ontology encrichment.
+        
+        Parameters:
+            num_enriched_terms (int): Number of enriched terms to plot. Defaults to 10
+        '''
         goea_results_sig = [r for r in self.goea_results_all if r.p_fdr_bh < self.pval_threshold and r.study_count > 2]
         goea_results_sig_sorted = sorted(goea_results_sig, key=lambda r: r.p_fdr_bh)
         enriched_terms = [r.GO for r in goea_results_sig_sorted][:num_enriched_terms]
@@ -294,11 +377,12 @@ class GeneOntologyEnrichment:
 if __name__ == '__main__':
     # Load and clean RNA sequencing data
     rna_seq_data = RNASeqData('gene_fpkm.xlsm')
-    filtered_data = rna_seq_data.clean_data(1000)
+    filtered_data = rna_seq_data.clean_data(50)
     
     # Run differential expression analysis
-    diff = diff_Exp(filtered_data)
+    diff = DiffExp(filtered_data)
     res_pd = diff.run_deseq(diff.get_gene_names())
+    print(res_pd)
     
     # Plot heatmap and volcano plot
     heatmap = diff.plot_heatmap(res_pd)
@@ -317,11 +401,9 @@ if __name__ == '__main__':
     
     # Perform GeneSetEnrichment
     g_sea = GeneSetEnrichment(res_pd)
-    df = g_sea.gsea()
-    
-    
+    g_sea.gsea()  
      
-    # Perform GO analysis
+    #Perform GO analysis
     #go_analysis = GoAnalysis(filtered_data, res_pd)
     #go_analysis.run_go_analysis()
     #go_analysis.plot_go_enrichment()
